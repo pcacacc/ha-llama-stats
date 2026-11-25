@@ -9,4 +9,4 @@ Home Assistant integration for tracking llama.cpp token usage and costs.
 
 Sensors: monthly input tokens, generated tokens, total tokens, monthly cost, snapshot count.
 
-Full documentation: [README.md](https://github.com/pacacc/ha-llama-stats/blob/main/README.md)
+Full documentation: [README.md](https://github.com/pcacacc/ha-llama-stats/blob/main/README.md)

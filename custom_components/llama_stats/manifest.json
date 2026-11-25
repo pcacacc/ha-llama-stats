@@ -1,12 +1,12 @@
 {
   "domain": "llama_stats",
   "name": "llama.cpp Stats",
-  "codeowners": ["@pacacc"],
+  "codeowners": ["@pcacacc"],
   "config_flow": true,
-  "documentation": "https://github.com/pacacc/ha-llama-stats",
+  "documentation": "https://github.com/pcacacc/ha-llama-stats",
   "integration_type": "device",
   "iot_class": "local_polling",
-  "issue_tracker": "https://github.com/pacacc/ha-llama-stats/issues",
+  "issue_tracker": "https://github.com/pcacacc/ha-llama-stats/issues",
   "requirements": [],
   "version": "1.0.0"
 }
