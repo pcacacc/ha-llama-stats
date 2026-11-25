@@ -1,0 +1,25 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.pytest_cache/
+.ruff_cache/
+
+# Runtime data files
+llama_stats_monthly.json
+data/
+
+# Home Assistant local test runs
+.homeassistant-test/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

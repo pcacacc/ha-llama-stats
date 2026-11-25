@@ -1,0 +1,32 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "llama.cpp Stats",
+        "description": "Die Integration zeigt auf einen llama.cpp-Metrics-Endpoint, der JSON mit input_tokens, gen_tokens und total_tokens zurückgibt.",
+        "data": {
+          "metrics_url": "Metrics-Endpoint-URL",
+          "scan_interval": "Abfrageintervall (Sekunden)",
+          "input_price_per_million": "Input-Preis pro Million Tokens (USD)",
+          "output_price_per_million": "Output-Preis pro Million Tokens (USD)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Der Metrics-Endpoint ist nicht erreichbar."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "llama.cpp Stats Optionen",
+        "data": {
+          "metrics_url": "Metrics-Endpoint-URL",
+          "scan_interval": "Abfrageintervall (Sekunden)",
+          "input_price_per_million": "Input-Preis pro Million Tokens (USD)",
+          "output_price_per_million": "Output-Preis pro Million Tokens (USD)"
+        }
+      }
+    }
+  }
+}
