@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-LOG_TS_RE = re.compile(r"^\[(.*?)\]")
+LOG_TS_RE = re.compile(r"^\[?(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\]?")
 PROMPT_EVAL_RE = re.compile(r"prompt eval time = .*? /\s*(\d+) tokens")
 EVAL_TIME_RE = re.compile(r"(?<!prompt )eval time = .*? /\s*(\d+) tokens")
 

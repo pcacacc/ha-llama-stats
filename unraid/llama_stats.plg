@@ -34,15 +34,15 @@ while (my $conn = $sock->accept) {
     if ($since) {
         my $arg = $since;
         $arg =~ s/[^0-9T:\.+-]//g;
-        @lines = qx{docker logs -t --since "$arg" $container 2>/dev/null};
+        @lines = qx{docker logs -t --since "$arg" $container 2>&1};
     } else {
-        @lines = qx{docker logs -t $container 2>/dev/null};
+        @lines = qx{docker logs -t $container 2>&1};
     }
 
     my ($input, $gen, $requests, $last) = (0, 0, 0, "");
     for my $l (@lines) {
         my $ts = "";
-        if ($l =~ /^\[([^\]]+)\]/) { $ts = $1; }
+        if ($l =~ /^\[?(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\]?/) { $ts = $1; }
         next if $since && $ts && $ts le $since;
         $last = $ts if $ts gt $last;
         if ($l =~ /prompt eval time = .*?\/\s*(\d+) tokens/) {
