@@ -12,12 +12,16 @@ from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
+    CONF_CONTAINER,
+    CONF_HOST,
     CONF_INPUT_PRICE,
-    CONF_METRICS_URL,
     CONF_OUTPUT_PRICE,
+    CONF_PORT,
     CONF_SCAN_INTERVAL,
+    DEFAULT_CONTAINER,
     DEFAULT_INPUT_PRICE,
     DEFAULT_OUTPUT_PRICE,
+    DEFAULT_PORT,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
@@ -25,24 +29,41 @@ from .coordinator import CannotConnect
 
 _LOGGER = logging.getLogger(__name__)
 
+_FIELD_ORDER = [
+    CONF_HOST,
+    CONF_PORT,
+    CONF_CONTAINER,
+    CONF_SCAN_INTERVAL,
+    CONF_INPUT_PRICE,
+    CONF_OUTPUT_PRICE,
+]
 
-def _user_schema() -> vol.Schema:
+
+def _schema(current: dict[str, Any]) -> vol.Schema:
     return vol.Schema(
         {
-            vol.Required(CONF_METRICS_URL): str,
-            vol.Optional(CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL): vol.All(
-                vol.Coerce(int), vol.Range(min=10, max=3600)
+            vol.Required(CONF_HOST, default=current.get(CONF_HOST, "homenas")): str,
+            vol.Optional(CONF_PORT, default=current.get(CONF_PORT, DEFAULT_PORT)): vol.All(
+                vol.Coerce(int), vol.Range(min=1, max=65535)
             ),
-            vol.Optional(CONF_INPUT_PRICE, default=DEFAULT_INPUT_PRICE): vol.Coerce(float),
-            vol.Optional(CONF_OUTPUT_PRICE, default=DEFAULT_OUTPUT_PRICE): vol.Coerce(float),
+            vol.Optional(CONF_CONTAINER, default=current.get(CONF_CONTAINER, DEFAULT_CONTAINER)): str,
+            vol.Optional(
+                CONF_SCAN_INTERVAL, default=current.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+            ): vol.All(vol.Coerce(int), vol.Range(min=10, max=3600)),
+            vol.Optional(
+                CONF_INPUT_PRICE, default=current.get(CONF_INPUT_PRICE, DEFAULT_INPUT_PRICE)
+            ): vol.Coerce(float),
+            vol.Optional(
+                CONF_OUTPUT_PRICE, default=current.get(CONF_OUTPUT_PRICE, DEFAULT_OUTPUT_PRICE)
+            ): vol.Coerce(float),
         }
     )
 
 
 async def validate_connection(session: aiohttp.ClientSession, url: str) -> None:
-    """Validate that the metrics endpoint is reachable."""
+    """Validate that the plugin endpoint is reachable."""
     try:
-        async with session.get(url) as response:
+        async with session.get(url, params={"since": "1970-01-01T00:00:00Z"}) as response:
             if response.status == 200:
                 await response.json()
                 return
@@ -54,7 +75,7 @@ async def validate_connection(session: aiohttp.ClientSession, url: str) -> None:
 class LlamaStatsConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for llama.cpp Stats."""
 
-    VERSION = 1
+    VERSION = 2
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -63,8 +84,8 @@ class LlamaStatsConfigFlow(ConfigFlow, domain=DOMAIN):
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            url = user_input[CONF_METRICS_URL].strip()
-            await self.async_set_unique_id(url.lower())
+            url = f"http://{user_input[CONF_HOST]}:{user_input[CONF_PORT]}/metrics"
+            await self.async_set_unique_id(f"{user_input[CONF_HOST]}:{user_input[CONF_PORT]}")
             try:
                 await validate_connection(async_get_clientsession(self.hass), url)
             except CannotConnect:
@@ -72,7 +93,7 @@ class LlamaStatsConfigFlow(ConfigFlow, domain=DOMAIN):
             else:
                 return self.async_create_entry(title="llama.cpp Stats", data=user_input)
 
-        return self.async_show_form(step_id="user", data_schema=_user_schema(), errors=errors)
+        return self.async_show_form(step_id="user", data_schema=_schema({}), errors=errors)
 
     @staticmethod
     @callback
@@ -96,29 +117,9 @@ class LlamaStatsOptionsFlow(OptionsFlow):
             return self.async_create_entry(title="", data=user_input)
 
         current = {
-            CONF_METRICS_URL: self._config_entry.options.get(
-                CONF_METRICS_URL, self._config_entry.data[CONF_METRICS_URL]
-            ),
-            CONF_SCAN_INTERVAL: self._config_entry.options.get(
-                CONF_SCAN_INTERVAL, self._config_entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-            ),
-            CONF_INPUT_PRICE: self._config_entry.options.get(
-                CONF_INPUT_PRICE, self._config_entry.data.get(CONF_INPUT_PRICE, DEFAULT_INPUT_PRICE)
-            ),
-            CONF_OUTPUT_PRICE: self._config_entry.options.get(
-                CONF_OUTPUT_PRICE, self._config_entry.data.get(CONF_OUTPUT_PRICE, DEFAULT_OUTPUT_PRICE)
-            ),
+            key: self._config_entry.options.get(
+                key, self._config_entry.data.get(key)
+            )
+            for key in _FIELD_ORDER
         }
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONF_METRICS_URL, default=current[CONF_METRICS_URL]): str,
-                    vol.Optional(CONF_SCAN_INTERVAL, default=current[CONF_SCAN_INTERVAL]): vol.All(
-                        vol.Coerce(int), vol.Range(min=10, max=3600)
-                    ),
-                    vol.Optional(CONF_INPUT_PRICE, default=current[CONF_INPUT_PRICE]): vol.Coerce(float),
-                    vol.Optional(CONF_OUTPUT_PRICE, default=current[CONF_OUTPUT_PRICE]): vol.Coerce(float),
-                }
-            ),
-        )
+        return self.async_show_form(step_id="init", data_schema=_schema(current))

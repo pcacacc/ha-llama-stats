@@ -3,9 +3,11 @@
     "step": {
       "user": {
         "title": "llama.cpp Stats",
-        "description": "Point the integration at a llama.cpp metrics endpoint that returns JSON with input_tokens, gen_tokens and total_tokens.",
+        "description": "Point the integration at the llama_stats companion plugin running on Unraid.",
         "data": {
-          "metrics_url": "Metrics endpoint URL",
+          "host": "Unraid host (e.g. homenas)",
+          "port": "Plugin port",
+          "container": "Container name",
           "scan_interval": "Poll interval (seconds)",
           "input_price_per_million": "Input price per million tokens (USD)",
           "output_price_per_million": "Output price per million tokens (USD)"
@@ -13,7 +15,7 @@
       }
     },
     "error": {
-      "cannot_connect": "Could not reach the metrics endpoint."
+      "cannot_connect": "Could not reach the plugin endpoint."
     }
   },
   "options": {
@@ -21,7 +23,9 @@
       "init": {
         "title": "llama.cpp Stats options",
         "data": {
-          "metrics_url": "Metrics endpoint URL",
+          "host": "Unraid host (e.g. homenas)",
+          "port": "Plugin port",
+          "container": "Container name",
           "scan_interval": "Poll interval (seconds)",
           "input_price_per_million": "Input price per million tokens (USD)",
           "output_price_per_million": "Output price per million tokens (USD)"

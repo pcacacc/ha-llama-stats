@@ -2,11 +2,11 @@
 
 Home Assistant integration for tracking llama.cpp token usage and costs.
 
-- Polls a llama.cpp metrics endpoint (JSON: `input_tokens`, `gen_tokens`, `total_tokens`)
-- Aggregates monthly statistics and persists them across restarts
-- Configurable pricing (USD per million tokens)
-- Config flow with UI options (interval + pricing)
+- Pairs with a small **Unraid companion plugin** (`unraid/llama_stats.plg`) that parses
+  `docker logs` of the llama.cpp container and serves JSON — no metrics daemon needed
+- HA polls the plugin endpoint, aggregates monthly statistics, persists everything in `.storage`
+- Configurable pricing (USD per million tokens), config flow + options flow
 
-Sensors: monthly input tokens, generated tokens, total tokens, monthly cost, snapshot count.
+Sensors: monthly input tokens, generated tokens, total tokens, monthly cost, requests.
 
 Full documentation: [README.md](https://github.com/pcacacc/ha-llama-stats/blob/main/README.md)

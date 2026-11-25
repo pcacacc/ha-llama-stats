@@ -18,12 +18,12 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from .const import DOMAIN
 from .coordinator import LlamaStatsCoordinator
 
-SENSOR_FIELDS: list[tuple[str, str, str | None, SensorStateClass | None, SensorDeviceClass | None]] = [
+SENSOR_FIELDS: list[tuple[str, str, str, SensorStateClass, SensorDeviceClass | None]] = [
     ("input_tokens", "Input tokens", "tokens", SensorStateClass.TOTAL, None),
     ("gen_tokens", "Generated tokens", "tokens", SensorStateClass.TOTAL, None),
     ("total_tokens", "Total tokens", "tokens", SensorStateClass.TOTAL, None),
     ("cost", "Monthly cost", "$", SensorStateClass.TOTAL, SensorDeviceClass.MONETARY),
-    ("snapshots", "Snapshots", "snapshots", SensorStateClass.TOTAL, None),
+    ("requests", "Requests", "requests", SensorStateClass.TOTAL, None),
 ]
 
 
@@ -68,7 +68,7 @@ class LlamaStatsSensor(CoordinatorEntity[LlamaStatsCoordinator], SensorEntity):
             identifiers={(DOMAIN, entry.entry_id)},
             name=entry.title or "llama.cpp",
             manufacturer="llama.cpp",
-            configuration_url=coordinator.metrics_url,
+            model=coordinator.container,
         )
 
     @property

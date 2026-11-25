@@ -1,0 +1,65 @@
+#!/bin/bash
+# llama_stats - Unraid companion plugin for ha-llama-stats
+# Parses llama.cpp docker logs locally and serves token metrics as JSON for Home Assistant.
+#
+# Install: copy this file to /boot/config/plugins/llama_stats.plg
+# It runs on every boot. Port/container can be overridden via env vars
+# (LLAMA_STATS_PORT / LLAMA_STATS_CONTAINER) or below.
+
+PLUGIN_DIR="/boot/config/plugins/llama_stats"
+PORT="${LLAMA_STATS_PORT:-19877}"
+CONTAINER="${LLAMA_STATS_CONTAINER:-llama.cpp}"
+
+mkdir -p "$PLUGIN_DIR"
+
+cat > "$PLUGIN_DIR/llama_stats_server.pl" << 'PERL_EOF'
+#!/usr/bin/perl
+use strict;
+use warnings;
+use IO::Socket::INET;
+
+my $port = $ENV{LLAMA_STATS_PORT} // 19877;
+my $container = $ENV{LLAMA_STATS_CONTAINER} // "llama.cpp";
+
+my $sock = IO::Socket::INET->new(Listen => 10, LocalPort => $port, ReuseAddr => 1)
+    or die "cannot listen on $port: $!";
+
+while (my $conn = $sock->accept) {
+    my $request = <$conn>;
+    while (my $line = <$conn>) { last if $line =~ /^\r?\n$/; }
+
+    my ($since) = ($request =~ /since=([^&\s]+)/) ? ($1) : ("");
+
+    my @lines;
+    if ($since) {
+        my $arg = $since;
+        $arg =~ s/[^0-9T:\.+-]//g;
+        @lines = qx{docker logs -t --since "$arg" $container 2>/dev/null};
+    } else {
+        @lines = qx{docker logs -t $container 2>/dev/null};
+    }
+
+    my ($input, $gen, $requests, $last) = (0, 0, 0, "");
+    for my $l (@lines) {
+        my $ts = "";
+        if ($l =~ /^\[([^\]]+)\]/) { $ts = $1; }
+        next if $since && $ts && $ts le $since;
+        $last = $ts if $ts gt $last;
+        if ($l =~ /prompt eval time = .*?\/\s*(\d+) tokens/) {
+            $input += $1;
+            $requests++;
+            next;
+        }
+        if ($l =~ /(?<!prompt )eval time = .*?\/\s*(\d+) tokens/) {
+            $gen += $1;
+        }
+    }
+
+    my $json = sprintf('{"input_tokens":%d,"gen_tokens":%d,"requests":%d,"last_timestamp":"%s"}', $input, $gen, $requests, $last);
+    print $conn "HTTP/1.0 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n$json";
+    close $conn;
+}
+PERL_EOF
+
+pkill -f llama_stats_server.pl 2>/dev/null
+perl "$PLUGIN_DIR/llama_stats_server.pl" >> /var/log/llama_stats.log 2>&1 &

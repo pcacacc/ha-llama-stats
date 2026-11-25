@@ -1,26 +1,39 @@
 # llama.cpp Stats
 
-Home Assistant integration ([HACS](https://hacs.xyz/)) that tracks llama.cpp token usage and cost over time.
+Home Assistant integration ([HACS](https://hacs.xyz/)) + Unraid companion plugin that tracks llama.cpp token usage and cost over time.
 
-## Features
+## Architecture
 
-- Polls a llama.cpp metrics endpoint that returns JSON:
-  ```json
-  {"input_tokens": 1750531, "gen_tokens": 11614683, "total_tokens": 13365214}
-  ```
-- Monthly statistics, persisted to `llama_stats_monthly.json` in the Home Assistant config directory (survives llama.cpp restarts)
-- Cost calculation with configurable pricing (USD per million tokens)
-- Full config flow: set endpoint, poll interval and pricing from the UI, no YAML needed
-- Snapshot history per month
+```
+llama.cpp container (Unraid)
+   └─ llama_stats plugin parses `docker logs` locally (Perl, runs at boot)
+         └─ JSON endpoint /metrics?since=<cursor>
+               └─ HA integration polls, aggregates monthly, persists in .storage
+```
 
-## Installation (HACS)
+No metrics daemon needed on the NAS beyond the plugin itself: the plugin is stateless
+(Home Assistant owns the cursor and all aggregation).
 
-1. Open HACS → Integrations → search for **llama.cpp Stats** → download
+## Unraid plugin
+
+1. Copy `unraid/llama_stats.plg` to `/boot/config/plugins/llama_stats.plg`
+2. Reboot Unraid (or run the script) — the server listens on port `19877`
+   (`LLAMA_STATS_PORT` / `LLAMA_STATS_CONTAINER` env vars override defaults)
+3. Endpoint: `GET /metrics?since=<ISO8601>` → `{"input_tokens":N,"gen_tokens":M,"requests":K,"last_timestamp":"..."}`
+
+It parses the per-request lines `prompt eval time = ... / N tokens` (input) and
+`eval time = ... / M tokens` (generated) from `docker logs -t llama.cpp`, ignoring
+lines at or before the given `since` timestamp (no double counting).
+
+## Home Assistant installation (HACS)
+
+1. HACS → Integrations → add this repo as custom repository (category **Integration**) → download
 2. Restart Home Assistant
 3. Settings → Devices & Services → Add Integration → **llama.cpp Stats**
-4. Enter the metrics endpoint URL (e.g. `http://192.168.0.207:19876/metrics`)
+4. Enter host (e.g. `homenas`), port `19877`, container `llama.cpp`, interval and pricing
 
-Without HACS: copy `custom_components/llama_stats/` to `<config>/custom_components/` and restart.
+Replaces any existing `command_line`/template token sensors — remove those and
+`llama_tokens.sh` when switching.
 
 ## Sensors
 
@@ -30,7 +43,9 @@ Without HACS: copy `custom_components/llama_stats/` to `<config>/custom_componen
 | Generated tokens | Current month generated tokens |
 | Total tokens | Current month total tokens |
 | Monthly cost | Cost in USD at the configured pricing |
-| Snapshots | Number of snapshots recorded this month |
+| Requests | Requests counted this month |
+
+State (cursor + monthly data) is persisted in HA `.storage` and survives restarts.
 
 ## Development
 
@@ -40,7 +55,7 @@ ruff check .
 pytest
 ```
 
-Tests cover the HA-independent store and cost calculation.
+Tests cover the HA-independent log parser, cost calculation and monthly model.
 
 ## License
 
