@@ -35,6 +35,8 @@ from .coordinator import CannotConnect
 
 _LOGGER = logging.getLogger(__name__)
 
+CURRENCY_OPTIONS = {"EUR": "EUR", "USD": "USD"}
+
 _FIELD_ORDER = [
     CONF_HOST,
     CONF_PORT,
@@ -73,7 +75,7 @@ def _schema(current: dict[str, Any]) -> vol.Schema:
             ): vol.Coerce(float),
             vol.Optional(
                 CONF_CURRENCY, default=current.get(CONF_CURRENCY, DEFAULT_CURRENCY)
-            ): vol.Any("EUR", "USD"),
+            ): vol.In(CURRENCY_OPTIONS),
         }
     )
 
