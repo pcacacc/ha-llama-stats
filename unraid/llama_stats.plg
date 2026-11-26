@@ -1,14 +1,17 @@
 #!/bin/bash
 # llama_stats - Unraid companion plugin for ha-llama-stats
-# Parses llama.cpp docker logs locally and serves token metrics as JSON for Home Assistant.
+# Serves token metrics as JSON for Home Assistant.
+#
+# Sources (query param container=<name>, cursor via since=<ts or offset>):
+#   llama.cpp  -> docker logs -t (cursor = timestamp)
+#   strata     -> engine log file (cursor = byte offset)
+#   gpus       -> AMD hwmon instantaneous power (W)
 #
 # Install: copy this file to /boot/config/plugins/llama_stats.plg
-# It runs on every boot. Port/container can be overridden via env vars
-# (LLAMA_STATS_PORT / LLAMA_STATS_CONTAINER) or below.
+# It runs on every boot. Port can be overridden via env var LLAMA_STATS_PORT.
 
 PLUGIN_DIR="/boot/config/plugins/llama_stats"
 PORT="${LLAMA_STATS_PORT:-19877}"
-CONTAINER="${LLAMA_STATS_CONTAINER:-llama.cpp}"
 
 mkdir -p "$PLUGIN_DIR"
 
@@ -16,10 +19,104 @@ cat > "$PLUGIN_DIR/llama_stats_server.pl" << 'PERL_EOF'
 #!/usr/bin/perl
 use strict;
 use warnings;
+use File::Basename;
 use IO::Socket::INET;
 
 my $port = $ENV{LLAMA_STATS_PORT} // 19877;
-my $container = $ENV{LLAMA_STATS_CONTAINER} // "llama.cpp";
+my $default_container = $ENV{LLAMA_STATS_CONTAINER} // "llama.cpp";
+my $strata_log = $ENV{LLAMA_STATS_STRATA_LOG} // "/mnt/m2cache/strata/state/strata/launch/docker.engine.log";
+my $hwmon_base = $ENV{LLAMA_STATS_HWMON_BASE} // "/sys/class/hwmon";
+my $drm_base = $ENV{LLAMA_STATS_DRM_BASE} // "/sys/class/drm";
+
+my %sources = (
+    "llama.cpp" => { type => "docker", container => "llama.cpp" },
+    "strata"    => { type => "file", path => $strata_log },
+    "gpus"      => { type => "gpus" },
+);
+
+sub read_file {
+    my ($file) = @_;
+    open(my $fh, "<", $file) or return "";
+    my $line = <$fh>;
+    close($fh);
+    $line =~ s/\s+$//;
+    return $line;
+}
+
+sub json_escape {
+    my ($s) = @_;
+    $s =~ s/\\/\\\\/g;
+    $s =~ s/"/\\"/g;
+    $s =~ s/\n/\\n/g;
+    $s =~ s/\r/\\r/g;
+    $s =~ s/\t/\\t/g;
+    return $s;
+}
+
+sub scan_gpus {
+    my %card_by_dev;
+
+    for my $card (glob("$drm_base/card[0-9]*")) {
+        next unless -d $card;
+        my $card_name = basename($card);
+        next unless $card_name =~ /^card\d+$/;
+
+        my $dev = readlink("$card/device");
+        next unless $dev;
+        $card_by_dev{basename($dev)} = $card_name;
+    }
+
+    my @gpus;
+
+    for my $hwmon (glob("$hwmon_base/hwmon*")) {
+        next unless -d $hwmon;
+
+        my $name = read_file("$hwmon/name");
+        next unless $name =~ /^amdgpu$/;
+
+        my $dev = readlink("$hwmon/device");
+        next unless $dev;
+        my $dev_name = basename($dev);
+
+        my $power_file = "$hwmon/power1_average";
+        next unless -e $power_file;
+
+        my $raw = read_file($power_file);
+        next unless $raw =~ /^\d+(?:\.\d+)?$/;
+
+        my $power_watts = sprintf("%.1f", $raw / 1_000_000);
+        my $id = $card_by_dev{$dev_name} // $dev_name;
+
+        push @gpus, {
+            id => $id,
+            label => "GPU $id",
+            bus => $dev_name,
+            power_watts => $power_watts,
+        };
+    }
+
+    my $total = 0;
+    $total += $_->{power_watts} for @gpus;
+
+    return \@gpus, sprintf("%.1f", $total);
+}
+
+sub gpu_json_list {
+    my ($gpus) = @_;
+    my @items;
+
+    for my $gpu (@$gpus) {
+        push @items, sprintf(
+            '{"id":"%s","label":"%s","bus":"%s","power_watts":%s}',
+            json_escape($gpu->{id}),
+            json_escape($gpu->{label}),
+            json_escape($gpu->{bus}),
+            $gpu->{power_watts},
+        );
+    }
+
+    return "[" . join(",", @items) . "]";
+}
 
 my $sock = IO::Socket::INET->new(Listen => 10, LocalPort => $port, ReuseAddr => 1)
     or die "cannot listen on $port: $!";
@@ -28,34 +125,67 @@ while (my $conn = $sock->accept) {
     my $request = <$conn>;
     while (my $line = <$conn>) { last if $line =~ /^\r?\n$/; }
 
+    my ($container) = ($request =~ /container=([^&\s]+)/) ? ($1) : ($default_container);
     my ($since) = ($request =~ /since=([^&\s]+)/) ? ($1) : ("");
 
-    my @lines;
-    if ($since) {
-        my $arg = $since;
-        $arg =~ s/[^0-9T:\.+-]//g;
-        @lines = qx{docker logs -t --since "$arg" $container 2>&1};
+    my $src = $sources{$container};
+    my $json;
+    if (!$src) {
+        $json = sprintf('{"error":"unknown container %s","known":%s}',
+            $container, join(",", map { qq{"$_"} } sort keys %sources));
     } else {
-        @lines = qx{docker logs -t $container 2>&1};
-    }
+        my ($gpus, $total) = scan_gpus();
+        my $gpus_json = gpu_json_list($gpus);
+        my ($input, $cached, $gen, $requests, $cursor) = (0, 0, 0, 0, $since);
 
-    my ($input, $gen, $requests, $last) = (0, 0, 0, "");
-    for my $l (@lines) {
-        my $ts = "";
-        if ($l =~ /^\[?(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\]?/) { $ts = $1; }
-        next if $since && $ts && $ts le $since;
-        $last = $ts if $ts gt $last;
-        if ($l =~ /prompt eval time = .*?\/\s*(\d+) tokens/) {
-            $input += $1;
-            $requests++;
-            next;
+        if ($src->{type} eq "gpus") {
+            $cursor = "";
         }
-        if ($l =~ /(?<!prompt )eval time = .*?\/\s*(\d+) tokens/) {
-            $gen += $1;
-        }
-    }
 
-    my $json = sprintf('{"input_tokens":%d,"gen_tokens":%d,"requests":%d,"last_timestamp":"%s"}', $input, $gen, $requests, $last);
+        my @lines;
+        if ($src->{type} eq "docker") {
+            my $arg = $since;
+            $arg =~ s/[^0-9T:\.+-]//g;
+            @lines = $arg ? qx{docker logs -t --since "$arg" $src->{container} 2>&1}
+                          : qx{docker logs -t $src->{container} 2>&1};
+            for my $l (@lines) {
+                my $ts = "";
+                if ($l =~ /^\[?(\d{4}-\d{2}-\d{2}T[\d:.]+Z)\]?/) { $ts = $1; }
+                next if $since && $ts && $ts le $since;
+                $cursor = $ts if $ts gt $cursor;
+                if ($l =~ /prompt eval time = .*?\/\s*(\d+) tokens(?: \(\s*(\d+) reused,)?/) {
+                    $input += $1;
+                    $cached += $2 if defined $2;
+                    $requests++;
+                    next;
+                }
+                if ($l =~ /(?<!prompt )eval time = .*?\/\s*(\d+) tokens/) {
+                    $gen += $1;
+                }
+            }
+        } elsif ($src->{type} eq "file") {
+            if (-f $src->{path}) {
+                open(my $fh, "<", $src->{path}) or die "cannot read $src->{path}: $!";
+                my $offset = ($since =~ /^\d+$/) ? $since : 0;
+                seek($fh, $offset, 0);
+                while (my $l = <$fh>) {
+                    if ($l =~ /prompt (\d+) tokens(?: = (\d+) reused \+ (\d+) read)?/) {
+                        $input += $1;
+                        $cached += $2 if defined $2;
+                        $requests++;
+                        if ($l =~ /(\d+) generated/) { $gen += $1; }
+                    }
+                }
+                $cursor = tell($fh);
+                close($fh);
+            }
+        }
+
+        $json = sprintf(
+            '{"container":"%s","input_tokens":%d,"cached_tokens":%d,"gen_tokens":%d,"requests":%d,"cursor":"%s","gpus":%s,"power_watts":%s}',
+            json_escape($container), $input, $cached, $gen, $requests, json_escape($cursor), $gpus_json, $total,
+        );
+    }
     print $conn "HTTP/1.0 200 OK\r\nContent-Type: application/json\r\nConnection: close\r\n\r\n$json";
     close $conn;
 }

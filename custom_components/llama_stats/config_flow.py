@@ -12,13 +12,19 @@ from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
+    CONF_CACHED_PRICE,
     CONF_CONTAINER,
+    CONF_CURRENCY,
+    CONF_ENERGY_PRICE,
     CONF_HOST,
     CONF_INPUT_PRICE,
     CONF_OUTPUT_PRICE,
     CONF_PORT,
     CONF_SCAN_INTERVAL,
+    DEFAULT_CACHED_PRICE,
     DEFAULT_CONTAINER,
+    DEFAULT_CURRENCY,
+    DEFAULT_ENERGY_PRICE,
     DEFAULT_INPUT_PRICE,
     DEFAULT_OUTPUT_PRICE,
     DEFAULT_PORT,
@@ -36,6 +42,9 @@ _FIELD_ORDER = [
     CONF_SCAN_INTERVAL,
     CONF_INPUT_PRICE,
     CONF_OUTPUT_PRICE,
+    CONF_CACHED_PRICE,
+    CONF_ENERGY_PRICE,
+    CONF_CURRENCY,
 ]
 
 
@@ -56,6 +65,15 @@ def _schema(current: dict[str, Any]) -> vol.Schema:
             vol.Optional(
                 CONF_OUTPUT_PRICE, default=current.get(CONF_OUTPUT_PRICE, DEFAULT_OUTPUT_PRICE)
             ): vol.Coerce(float),
+            vol.Optional(
+                CONF_CACHED_PRICE, default=current.get(CONF_CACHED_PRICE, DEFAULT_CACHED_PRICE)
+            ): vol.Coerce(float),
+            vol.Optional(
+                CONF_ENERGY_PRICE, default=current.get(CONF_ENERGY_PRICE, DEFAULT_ENERGY_PRICE)
+            ): vol.Coerce(float),
+            vol.Optional(
+                CONF_CURRENCY, default=current.get(CONF_CURRENCY, DEFAULT_CURRENCY)
+            ): vol.Any("EUR", "USD"),
         }
     )
 

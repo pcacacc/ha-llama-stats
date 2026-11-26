@@ -5,9 +5,9 @@ Home Assistant integration ([HACS](https://hacs.xyz/)) + Unraid companion plugin
 ## Architecture
 
 ```
-llama.cpp container (Unraid)
-   └─ llama_stats plugin parses `docker logs` locally (Perl, runs at boot)
-         └─ JSON endpoint /metrics?since=<cursor>
+llama.cpp container / AMD GPUs (Unraid)
+   └─ llama_stats plugin parses `docker logs` and AMD hwmon power locally (Perl, runs at boot)
+        └─ JSON endpoint /metrics?container=<source>&since=<cursor>
                └─ HA integration polls, aggregates monthly, persists in .storage
 ```
 
@@ -19,7 +19,7 @@ No metrics daemon needed on the NAS beyond the plugin itself: the plugin is stat
 1. Copy `unraid/llama_stats.plg` to `/boot/config/plugins/llama_stats.plg`
 2. Reboot Unraid (or run the script) — the server listens on port `19877`
    (`LLAMA_STATS_PORT` / `LLAMA_STATS_CONTAINER` env vars override defaults)
-3. Endpoint: `GET /metrics?since=<ISO8601>` → `{"input_tokens":N,"gen_tokens":M,"requests":K,"last_timestamp":"..."}`
+3. Endpoint: `GET /metrics?container=<source>&since=<cursor>` → token fields plus optional `"cached_tokens"`, `"gpus"`, and `"power_watts"`
 
 It parses the per-request lines `prompt eval time = ... / N tokens` (input) and
 `eval time = ... / M tokens` (generated) from `docker logs -t llama.cpp`, ignoring
@@ -40,12 +40,18 @@ Replaces any existing `command_line`/template token sensors — remove those and
 | Sensor | Description |
 |---|---|
 | Input tokens | Current month input tokens |
+| Cached input tokens | Current month cached/reused input tokens, when available |
 | Generated tokens | Current month generated tokens |
 | Total tokens | Current month total tokens |
-| Monthly cost | Cost in USD at the configured pricing |
+| Token cost | Token cost at the configured token pricing |
+| Energy | Current month energy estimate from GPU power |
+| Energy cost | Energy cost at the configured kWh price |
+| Net cost | Token cost minus energy cost |
 | Requests | Requests counted this month |
+| GPU power | Current total AMD GPU power in watts |
+| GPU cardN | Current power draw for each discovered AMD GPU in watts |
 
-State (cursor + monthly data) is persisted in HA `.storage` and survives restarts.
+State (cursor + monthly data + energy/cost totals + last GPU power) is persisted in HA `.storage` and survives restarts.
 
 ## Development
 

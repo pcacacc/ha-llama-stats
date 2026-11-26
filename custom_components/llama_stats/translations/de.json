@@ -7,10 +7,13 @@
         "data": {
           "host": "Unraid-Host (z. B. homenas)",
           "port": "Plugin-Port",
-          "container": "Container-Name",
+          "container": "Container-/Quellennamen, kommagetrennt (z. B. llama.cpp, strata, gpus)",
           "scan_interval": "Abfrageintervall (Sekunden)",
-          "input_price_per_million": "Input-Preis pro Million Tokens (USD)",
-          "output_price_per_million": "Output-Preis pro Million Tokens (USD)"
+            "input_price_per_million": "Input-Preis pro Million Tokens",
+            "output_price_per_million": "Output-Preis pro Million Tokens",
+            "cached_input_price_per_million": "Cache-Input-Preis pro Million Tokens",
+            "energy_price_per_kwh": "Strompreis pro kWh",
+            "currency": "Währung (EUR oder USD)"
         }
       }
     },
@@ -25,10 +28,13 @@
         "data": {
           "host": "Unraid-Host (z. B. homenas)",
           "port": "Plugin-Port",
-          "container": "Container-Name",
+          "container": "Container-/Quellennamen, kommagetrennt (z. B. llama.cpp, strata, gpus)",
           "scan_interval": "Abfrageintervall (Sekunden)",
-          "input_price_per_million": "Input-Preis pro Million Tokens (USD)",
-          "output_price_per_million": "Output-Preis pro Million Tokens (USD)"
+            "input_price_per_million": "Input-Preis pro Million Tokens",
+            "output_price_per_million": "Output-Preis pro Million Tokens",
+            "cached_input_price_per_million": "Cache-Input-Preis pro Million Tokens",
+            "energy_price_per_kwh": "Strompreis pro kWh",
+            "currency": "Währung (EUR oder USD)"
         }
       }
     }
